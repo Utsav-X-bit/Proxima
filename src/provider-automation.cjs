@@ -452,17 +452,20 @@ const RESPONSE_EXTRACTION_BODIES = {
         if (allProseBlocks.length > 0) {
             const lastBlock = allProseBlocks[allProseBlocks.length - 1];
             let bestContainer = lastBlock;
-            let bestLength = lastBlock.textContent.length;
             let parent = lastBlock.parentElement;
+            const getNormalizedText = (element) => (element?.textContent || '').replace(/\\s+/g, ' ').trim();
+            const hasExternalQueryHeading = (root, container) => Array.from(root.querySelectorAll('h1'))
+                .some((heading) => !container.contains(heading) && getNormalizedText(heading).length > 0);
 
             for (let i = 0; i < 10 && parent; i++) {
                 if (parent.tagName === 'MAIN' || parent.tagName === 'BODY' || parent.tagName === 'HTML') break;
-                if (parent.querySelector('textarea, input[type="text"]')) break;
+                if (parent.querySelector('textarea, input[type="text"], [role="textbox"], [contenteditable="true"]')) break;
+                if (hasExternalQueryHeading(parent, bestContainer)) break;
 
-                const parentLength = parent.textContent.length;
-                if (parentLength > bestLength && parentLength < 50000) {
+                const parentLength = getNormalizedText(parent).length;
+                const currentLength = getNormalizedText(bestContainer).length;
+                if (parentLength > currentLength && parentLength < 50000) {
                     bestContainer = parent;
-                    bestLength = parentLength;
                 }
 
                 parent = parent.parentElement;
@@ -1331,7 +1334,7 @@ const TYPING_DETECTION_BODIES = {
         }
 
         const stopButton = Array.from(document.querySelectorAll('button, [role="button"]'))
-            .find((element) => isVisible(element) && /stop|cancel/i.test((element.getAttribute('aria-label') || '') + ' ' + (element.innerText || element.textContent || '')));
+            .find((element) => isVisible(element) && /stop/i.test((element.getAttribute('aria-label') || '') + ' ' + (element.innerText || element.textContent || '')));
         if (stopButton) {
             return { isTyping: true, provider: 'copilot' };
         }
@@ -1370,7 +1373,7 @@ const TYPING_DETECTION_BODIES = {
         }
 
         const stopButton = Array.from(document.querySelectorAll('button, [role="button"]'))
-            .find((element) => isVisible(element) && /stop|cancel/i.test((element.getAttribute('aria-label') || '') + ' ' + (element.innerText || element.textContent || '')));
+            .find((element) => isVisible(element) && /\bstop\b/i.test((element.getAttribute('aria-label') || '') + ' ' + (element.innerText || element.textContent || '')));
         if (stopButton) {
             return { isTyping: true, provider: 'metaai' };
         }
@@ -1471,8 +1474,9 @@ const SEND_BUTTON_SELECTORS = {
     gemini: [
         'button.send-button',
         'button.submit',
-        'button[aria-label*="Send"]',
-        'button[aria-label*="Enviar"]'
+        'button[type="submit"]',
+        'button[class*="send-button"]',
+        'button[class*="submit"]'
     ],
     deepseek: [
         'textarea[name="search"]'
@@ -1492,8 +1496,8 @@ const SEND_BUTTON_SELECTORS = {
         'button[aria-label*="Submit"]'
     ],
     metaai: [
-        'button[aria-label="Send"]',
-        'button[aria-label*="Send"]'
+        '[data-testid="composer-send-button"]',
+        'button[type="submit"]'
     ],
     qwen: [
         'button.send-button',
@@ -1609,17 +1613,33 @@ function buildSendButtonReadyScript(provider) {
     return `
         (function() {
             const selectors = ${JSON.stringify(selectors)};
+            const isVisible = (element) => {
+                if (!element) return false;
+                const style = window.getComputedStyle(element);
+                return style.display !== 'none' &&
+                    style.visibility !== 'hidden' &&
+                    (element.offsetWidth > 0 || element.offsetHeight > 0 || element.getClientRects().length > 0);
+            };
+            let foundButton = false;
 
             for (const selector of selectors) {
-                const sendButton = document.querySelector(selector);
-                if (!sendButton) continue;
+                const buttons = Array.from(document.querySelectorAll(selector));
+                for (const sendButton of buttons) {
+                    foundButton = true;
+                    const className = String(sendButton.className || '').toLowerCase();
+                    const ariaDisabled = String(sendButton.getAttribute('aria-disabled') || '').toLowerCase();
+                    const isDisabled = !!sendButton.disabled ||
+                        sendButton.hasAttribute('disabled') ||
+                        ariaDisabled === 'true' ||
+                        className.includes('disabled');
 
-                const isDisabled = sendButton.disabled || sendButton.hasAttribute('disabled');
-                const isVisible = sendButton.offsetParent !== null || sendButton.offsetWidth > 0;
-                return !isDisabled && isVisible;
+                    if (!isDisabled && isVisible(sendButton)) {
+                        return true;
+                    }
+                }
             }
 
-            return true;
+            return foundButton ? false : true;
         })()
     `;
 }

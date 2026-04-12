@@ -496,6 +496,8 @@ class ProviderRuntime {
         const responseOptions = getResponseOptions(provider);
         const maxPolls = responseOptions.maxWaitSeconds * 2;
         const imageCapableProviders = new Set(['chatgpt', 'gemini', 'grok', 'copilot', 'metaai', 'qwen']);
+        const baselineCheckedProviders = new Set(['perplexity', 'claude', 'deepseek', 'grok', 'zai', 'copilot', 'metaai', 'qwen']);
+        const domShortCircuitProviders = new Set(['metaai']);
         let networkTextCandidate = '';
 
         console.log(`[getProviderResponse] ⚡ ${provider}: Network interceptor polling (fast path)...`);
@@ -553,21 +555,123 @@ class ProviderRuntime {
 
         console.log(`[getProviderResponse] ${provider}: Using DOM fallback path...`);
 
-        try {
-            const typingNow = await this.isTyping(provider);
-            if (typingNow.isTyping) {
-                console.log(`[getProviderResponse] ${provider}: AI still typing, waiting...`);
-                for (let i = 0; i < responseOptions.maxWaitSeconds; i++) {
-                    const typingStatus = await this.isTyping(provider);
-                    if (!typingStatus.isTyping) break;
-                    if (i % 20 === 0 && i > 0) {
-                        console.log(`[getProviderResponse] ${provider}: Still typing (${i * 0.5}s)...`);
-                    }
-                    await this.sleep(500);
-                }
+        const extractScript = buildResponseExtractionScript(provider);
+        if (!extractScript) {
+            this.clearProviderState(provider);
+            return networkTextCandidate || 'No response captured';
+        }
+
+        const previousState = { ...this.getProviderState(provider) };
+        let lastPayload = null;
+        let lastSignature = '';
+        let stableCount = 0;
+        let foundNewResponse = false;
+
+        const emitChallenge = (payload) => {
+            if (!payload?.challenge) {
+                return;
             }
+
+            this.emitProviderAlert(provider, payload.challenge.message, payload.challenge.kind || 'warning');
+            this.clearProviderState(provider);
+            throw new Error(payload.challenge.message);
+        };
+
+        const isFreshDomPayload = async (payload, fingerprintText) => {
+            if (!baselineCheckedProviders.has(provider) || foundNewResponse) {
+                return true;
+            }
+
+            let currentState;
+            if (provider === 'perplexity') {
+                const currentRaw = await webContents.executeJavaScript(getOldResponseCaptureScript(provider)).catch(() => ({ count: 0, fingerprint: '' }));
+                currentState = normalizeResponseState(provider, currentRaw);
+            } else {
+                currentState = {
+                    fingerprint: fingerprintText.substring(0, 200).trim(),
+                    blockCount: 0
+                };
+            }
+
+            if (hasNewDomResponse({ provider, previousState, currentState })) {
+                foundNewResponse = true;
+                return true;
+            }
+
+            if (previousState.fingerprint || previousState.blockCount > 0) {
+                return false;
+            }
+
+            foundNewResponse = true;
+            return true;
+        };
+
+        const collectDomPayload = async () => {
+            const rawPayload = await webContents.executeJavaScript(extractScript).catch(() => null);
+            const payload = this.normalizeExtractedResponse(rawPayload);
+            emitChallenge(payload);
+
+            if (!this.hasMeaningfulExtractedResponse(payload)) {
+                return { ready: false, payload: null, fingerprintText: '' };
+            }
+
+            const fingerprintText = this.getFingerprintText(payload);
+            if (!(await isFreshDomPayload(payload, fingerprintText))) {
+                return { ready: false, payload: null, fingerprintText };
+            }
+
+            const signature = this.getExtractedResponseSignature(payload);
+            if (signature === lastSignature) {
+                stableCount++;
+            } else {
+                stableCount = 0;
+                lastPayload = payload;
+                lastSignature = signature;
+            }
+
+            return {
+                ready: stableCount >= responseOptions.stableThreshold,
+                payload: lastPayload || payload,
+                fingerprintText
+            };
+        };
+
+        let typingNow = { isTyping: false };
+        try {
+            typingNow = await this.isTyping(provider);
         } catch (e) {
-            // Ignore typing detection errors and continue with DOM capture.
+            typingNow = { isTyping: false, error: e.message };
+        }
+
+        if (typingNow.isTyping) {
+            console.log(`[getProviderResponse] ${provider}: AI still typing, waiting...`);
+            for (let i = 0; i < responseOptions.maxWaitSeconds; i++) {
+                let typingStatus;
+                try {
+                    typingStatus = await this.isTyping(provider);
+                } catch (e) {
+                    break;
+                }
+
+                if (domShortCircuitProviders.has(provider)) {
+                    const domResult = await collectDomPayload();
+                    if (domResult.ready && domResult.payload) {
+                        console.log(`[getProviderResponse] ${provider}: DOM response stabilized while typing signal remained active`);
+                        this.clearProviderState(provider);
+                        return await this.formatCapturedResponse(provider, domResult.payload);
+                    }
+                }
+
+                if (!typingStatus.isTyping) {
+                    break;
+                }
+
+                if (i % 20 === 0 && i > 0) {
+                    console.log(`[getProviderResponse] ${provider}: Still typing (${i * 0.5}s)...`);
+                }
+
+                await this.sleep(500);
+            }
         }
 
         await this.sleep(responseOptions.domSettleDelayMs);
@@ -599,74 +703,12 @@ class ProviderRuntime {
             // Ignore late network fallback errors.
         }
 
-        const extractScript = buildResponseExtractionScript(provider);
-        if (!extractScript) {
-            this.clearProviderState(provider);
-            return 'No response captured';
-        }
-
-        let lastPayload = null;
-        let lastSignature = '';
-        let stableCount = 0;
-        let foundNewResponse = false;
-        const previousState = { ...this.getProviderState(provider) };
-
         for (let i = 0; i < responseOptions.maxDomPolls; i++) {
-            const rawPayload = await webContents.executeJavaScript(extractScript).catch(() => null);
-            const payload = this.normalizeExtractedResponse(rawPayload);
-            const fingerprintText = this.getFingerprintText(payload);
-
-            if (payload.challenge) {
-                this.emitProviderAlert(provider, payload.challenge.message, payload.challenge.kind || 'warning');
+            const domResult = await collectDomPayload();
+            if (domResult.ready && domResult.payload) {
+                console.log(`[getProviderResponse] ✓ Captured (${domResult.fingerprintText.length} chars, ${domResult.payload.imageCount || 0} images)`);
                 this.clearProviderState(provider);
-                throw new Error(payload.challenge.message);
-            }
-
-            if (this.hasMeaningfulExtractedResponse(payload)) {
-                if (provider === 'perplexity' && !foundNewResponse) {
-                    const currentRaw = await webContents.executeJavaScript(getOldResponseCaptureScript(provider)).catch(() => ({ count: 0, fingerprint: '' }));
-                    const currentState = normalizeResponseState(provider, currentRaw);
-
-                    if (hasNewDomResponse({ provider, previousState, currentState })) {
-                        foundNewResponse = true;
-                    } else if (previousState.fingerprint || previousState.blockCount > 0) {
-                        await this.sleep(500);
-                        continue;
-                    } else {
-                        foundNewResponse = true;
-                    }
-                }
-
-                if (provider === 'claude' && !foundNewResponse) {
-                    const currentState = {
-                        fingerprint: fingerprintText.substring(0, 200).trim(),
-                        blockCount: 0
-                    };
-
-                    if (hasNewDomResponse({ provider, previousState, currentState })) {
-                        foundNewResponse = true;
-                    } else if (previousState.fingerprint) {
-                        await this.sleep(500);
-                        continue;
-                    } else {
-                        foundNewResponse = true;
-                    }
-                }
-
-                const signature = this.getExtractedResponseSignature(payload);
-
-                if (signature === lastSignature) {
-                    stableCount++;
-                    if (stableCount >= responseOptions.stableThreshold) {
-                        console.log(`[getProviderResponse] ✓ Captured (${fingerprintText.length} chars, ${payload.imageCount || 0} images)`);
-                        this.clearProviderState(provider);
-                        return await this.formatCapturedResponse(provider, payload);
-                    }
-                } else {
-                    stableCount = 0;
-                    lastPayload = payload;
-                    lastSignature = signature;
-                }
+                return await this.formatCapturedResponse(provider, domResult.payload);
             }
 
             await this.sleep(500);

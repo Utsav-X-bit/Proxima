@@ -1,186 +1,49 @@
-const INPUT_SELECTORS = [
-    'rich-textarea .ql-editor',
-    '.ql-editor[role="textbox"]',
-    'rich-textarea [contenteditable="true"]',
-    '[contenteditable="true"][role="textbox"]',
-    '[contenteditable="true"][aria-label*="Gemini"]',
-    'textarea[aria-label*="message"]',
-    'textarea',
-    'input[type="text"]'
-];
+const {
+    buildComposerScript,
+    getShortcutModifier,
+    clearFocusedInput,
+    typeWithNativeInsert,
+    typeWithClipboardPaste,
+    waitForComposerReady,
+    submissionLikelyStarted,
+    clickAtPoint
+} = require('./composer-helpers.cjs');
 
-const SEND_BUTTON_SELECTORS = [
-    'button.send-button',
-    'button.submit',
-    'button[aria-label*="Send"]',
-    'button[aria-label*="Enviar"]'
-];
-
-function buildFocusScript() {
-    return `
-        (function() {
-            const selectors = ${JSON.stringify(INPUT_SELECTORS)};
-
-            for (const selector of selectors) {
-                const input = document.querySelector(selector);
-                if (!input) continue;
-
-                input.focus();
-                input.click();
-
-                return {
-                    ready: true,
-                    selector,
-                    tagName: input.tagName,
-                    isContentEditable: input.contentEditable === 'true' || input.isContentEditable,
-                    textPreview: (input.value || input.innerText || input.textContent || '').trim().slice(0, 120)
-                };
-            }
-
-            return { ready: false, error: 'No Gemini input found' };
-        })()
-    `;
-}
-
-function buildStateScript() {
-    return `
-        (function() {
-            const inputSelectors = ${JSON.stringify(INPUT_SELECTORS)};
-            const buttonSelectors = ${JSON.stringify(SEND_BUTTON_SELECTORS)};
-            const isVisible = (element) => {
-                if (!element) return false;
-                const style = window.getComputedStyle(element);
-                return style.display !== 'none' &&
-                    style.visibility !== 'hidden' &&
-                    (element.offsetWidth > 0 || element.offsetHeight > 0 || element.getClientRects().length > 0);
-            };
-
-            let input = null;
-            let inputSelector = '';
-            for (const selector of inputSelectors) {
-                input = document.querySelector(selector);
-                if (input) {
-                    inputSelector = selector;
-                    break;
-                }
-            }
-
-            let sendButton = null;
-            let sendButtonSelector = '';
-            for (const selector of buttonSelectors) {
-                sendButton = document.querySelector(selector);
-                if (sendButton) {
-                    sendButtonSelector = selector;
-                    break;
-                }
-            }
-
-            const className = String(sendButton?.className || '');
-            const disabled = !!sendButton &&
-                (!!sendButton.disabled ||
-                    sendButton.hasAttribute('disabled') ||
-                    sendButton.getAttribute('aria-disabled') === 'true' ||
-                    className.includes('disabled'));
-
-            return {
-                inputSelector,
-                textPreview: (input?.value || input?.innerText || input?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
-                sendButtonFound: !!sendButton,
-                sendButtonSelector,
-                sendButtonVisible: isVisible(sendButton),
-                sendButtonDisabled: disabled,
-                sendButtonAria: sendButton?.getAttribute('aria-label') || '',
-                sendButtonClass: className.slice(0, 160)
-            };
-        })()
-    `;
-}
-
-function buildClickScript() {
-    return `
-        (function() {
-            const selectors = ${JSON.stringify(SEND_BUTTON_SELECTORS)};
-            const isVisible = (element) => {
-                if (!element) return false;
-                const style = window.getComputedStyle(element);
-                return style.display !== 'none' &&
-                    style.visibility !== 'hidden' &&
-                    (element.offsetWidth > 0 || element.offsetHeight > 0 || element.getClientRects().length > 0);
-            };
-
-            for (const selector of selectors) {
-                const sendButton = document.querySelector(selector);
-                if (!sendButton) continue;
-
-                const className = String(sendButton.className || '');
-                const disabled = !!sendButton.disabled ||
-                    sendButton.hasAttribute('disabled') ||
-                    sendButton.getAttribute('aria-disabled') === 'true' ||
-                    className.includes('disabled');
-
-                if (disabled || !isVisible(sendButton)) {
-                    return {
-                        clicked: false,
-                        selector,
-                        reason: disabled ? 'Send button disabled' : 'Send button not visible',
-                        ariaLabel: sendButton.getAttribute('aria-label') || '',
-                        className: className.slice(0, 160)
-                    };
-                }
-
-                sendButton.click();
-                return {
-                    clicked: true,
-                    selector,
-                    ariaLabel: sendButton.getAttribute('aria-label') || '',
-                    className: className.slice(0, 160)
-                };
-            }
-
-            return { clicked: false, reason: 'No send button found' };
-        })()
-    `;
-}
+const GEMINI_COMPOSER_CONFIG = {
+    inputSelectors: [
+        'rich-textarea .ql-editor',
+        '.ql-editor[role="textbox"]',
+        'rich-textarea [contenteditable="true"]',
+        '[contenteditable="true"][role="textbox"]',
+        '[contenteditable="true"][data-placeholder]',
+        'textarea',
+        'input[type="text"]'
+    ],
+    buttonSelectors: [
+        'button.send-button',
+        'button.submit',
+        'button[type="submit"]',
+        'button[class*="send-button"]',
+        'button[class*="submit"]'
+    ],
+    buttonClassHints: ['send-button', 'submit', 'has-input'],
+    buttonTestIdHints: ['send', 'submit'],
+    notFoundMessage: 'No Gemini input found',
+    noButtonMessage: 'No Gemini send button found'
+};
 
 async function focusGeminiInput(webContents) {
-    return webContents.executeJavaScript(buildFocusScript());
+    return webContents.executeJavaScript(buildComposerScript({
+        ...GEMINI_COMPOSER_CONFIG,
+        action: 'focus'
+    }));
 }
 
 async function getGeminiComposerState(webContents) {
-    return webContents.executeJavaScript(buildStateScript());
-}
-
-async function clearFocusedInput(webContents, runtime, modifier) {
-    await webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A', modifiers: [modifier] });
-    await webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A', modifiers: [modifier] });
-    await runtime.sleep(60);
-    await webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
-    await webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
-    await runtime.sleep(120);
-}
-
-async function typeWithNativeInsert(webContents, message) {
-    if (typeof webContents.insertText !== 'function') {
-        return { ok: false, method: 'native-insert-unavailable' };
-    }
-
-    await Promise.resolve(webContents.insertText(message));
-    return { ok: true, method: 'native-insertText' };
-}
-
-async function typeWithClipboardPaste(webContents, runtime, message, modifier) {
-    const previousClipboard = runtime.clipboard.readText();
-    runtime.clipboard.writeText(message);
-
-    try {
-        await webContents.sendInputEvent({ type: 'keyDown', keyCode: 'V', modifiers: [modifier] });
-        await webContents.sendInputEvent({ type: 'keyUp', keyCode: 'V', modifiers: [modifier] });
-        await runtime.sleep(180);
-    } finally {
-        runtime.clipboard.writeText(previousClipboard);
-    }
-
-    return { ok: true, method: 'clipboard-paste' };
+    return webContents.executeJavaScript(buildComposerScript({
+        ...GEMINI_COMPOSER_CONFIG,
+        action: 'state'
+    }));
 }
 
 module.exports = async function sendToGemini({ webContents, message, runtime }) {
@@ -188,7 +51,7 @@ module.exports = async function sendToGemini({ webContents, message, runtime }) 
 
     const previousState = await runtime.capturePreviousResponse('gemini', { force: true });
     const previousFingerprint = previousState.fingerprint || '';
-    const shortcutModifier = process.platform === 'darwin' ? 'meta' : 'control';
+    const shortcutModifier = getShortcutModifier();
 
     console.log('[Gemini] Captured old response fingerprint:', previousFingerprint.substring(0, 50) + '...');
 
@@ -202,10 +65,13 @@ module.exports = async function sendToGemini({ webContents, message, runtime }) 
     await clearFocusedInput(webContents, runtime, shortcutModifier);
 
     let inputMethod = 'native-insertText';
-    let typeResult = await typeWithNativeInsert(webContents, message);
-    await runtime.sleep(250);
+    await typeWithNativeInsert(webContents, message);
 
-    let composerState = await getGeminiComposerState(webContents);
+    let composerState = await waitForComposerReady(
+        () => getGeminiComposerState(webContents),
+        runtime,
+        { attempts: 14, delayMs: 150 }
+    );
     console.log('[Gemini] Composer state after native insert:', composerState);
 
     if (!composerState.sendButtonFound || composerState.sendButtonDisabled || !composerState.sendButtonVisible) {
@@ -214,39 +80,50 @@ module.exports = async function sendToGemini({ webContents, message, runtime }) 
         await focusGeminiInput(webContents);
         await clearFocusedInput(webContents, runtime, shortcutModifier);
 
-        typeResult = await typeWithClipboardPaste(webContents, runtime, message, shortcutModifier);
+        const typeResult = await typeWithClipboardPaste(webContents, runtime, message, shortcutModifier);
         inputMethod = typeResult.method;
-        await runtime.sleep(250);
 
-        composerState = await getGeminiComposerState(webContents);
+        composerState = await waitForComposerReady(
+            () => getGeminiComposerState(webContents),
+            runtime,
+            { attempts: 14, delayMs: 150 }
+        );
         console.log('[Gemini] Composer state after clipboard paste:', composerState);
     }
 
-    const clickScript = buildClickScript();
-    let clickResult = null;
+    let clickResult = await webContents.executeJavaScript(buildComposerScript({
+        ...GEMINI_COMPOSER_CONFIG,
+        action: 'click'
+    }));
+    await runtime.sleep(180);
 
-    for (let attempt = 0; attempt < 15; attempt++) {
-        clickResult = await webContents.executeJavaScript(clickScript);
-        if (clickResult?.clicked) {
-            break;
-        }
+    let postClickState = await getGeminiComposerState(webContents);
 
-        await runtime.sleep(200);
+    if (!submissionLikelyStarted(postClickState) && clickResult?.clickPoint) {
+        console.log('[Gemini] DOM click did not change composer state, retrying with real mouse click...');
+        await clickAtPoint(webContents, clickResult.clickPoint);
+        await runtime.sleep(180);
+        postClickState = await getGeminiComposerState(webContents);
+        clickResult = { ...(clickResult || {}), physicalClick: true };
     }
 
     console.log('[Gemini] Click result:', clickResult);
+    console.log('[Gemini] Post-click state:', postClickState);
 
-    if (!clickResult?.clicked) {
+    if (!submissionLikelyStarted(postClickState)) {
         await focusGeminiInput(webContents);
         await runtime.sleep(100);
         await webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
         await webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+        await runtime.sleep(120);
+        postClickState = await getGeminiComposerState(webContents);
     }
 
     return {
         sent: true,
         method: inputMethod,
         compose: composerState,
-        submit: clickResult || { clicked: false, reason: 'Used Enter fallback' }
+        submit: clickResult || { clicked: false, reason: 'Used Enter fallback' },
+        postClick: postClickState
     };
 };
