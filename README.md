@@ -4,14 +4,14 @@
 
 ### Multi-AI Gateway — One API, All Models
 
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/Zen4-bit/Proxima/releases)
+[![Version](https://img.shields.io/badge/version-3.5.0-blue.svg)](https://github.com/Zen4-bit/Proxima/releases)
 [![License](https://img.shields.io/badge/license-Personal%20Use-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)]()
-[![MCP Tools](https://img.shields.io/badge/MCP%20Tools-45%2B-orange.svg)]()
-[![Providers](https://img.shields.io/badge/AI%20Providers-4-purple.svg)]()
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg)]()
+[![MCP Tools](https://img.shields.io/badge/MCP%20Tools-54-orange.svg)]()
+[![Providers](https://img.shields.io/badge/AI%20Providers-9-purple.svg)]()
 
-Proxima acts like a connector browser to turn all your interactive AI browser sessions into an interactive endpoint for AI MCP's.
-ChatGPT, Claude, Gemini, Perplexity, CoPilot, Deepseek, Z.ai, Meta.ai are all accessible as MCP. All you need to do is login to each of them in the Proxima browser shell. No API keys needed.
+Proxima turns logged-in browser AI sessions into a local MCP server and OpenAI-compatible API.
+ChatGPT, Claude, Gemini, Perplexity, DeepSeek, Grok, Z.AI, Copilot, and Meta AI are all available through the same Proxima instance. Just log in to each provider inside the Proxima browser shell. No API keys needed.
 
 [Getting Started](#getting-started) · [API Usage](#api-usage) · [SDKs](#sdks) · [MCP Tools](#mcp-tools) · [Configuration](#configuration)
 
@@ -23,7 +23,7 @@ https://github.com/user-attachments/assets/6eb76618-2c1d-4dad-b753-aaaee9e93310
 
 ---
 
-![Proxima Settings](assets/proxima-settings.png)
+![Proxima Settings](assets/proxima-provider.jpg)
 
 ![Proxima Provider View](assets/proxima-screenshot.jpg)
 
@@ -50,8 +50,8 @@ POST /v1/chat/completions
 | Feature | Description |
 |---------|-------------|
 | **One Endpoint** | Everything through `/v1/chat/completions` — no separate URLs |
-| **4 AI Providers** | ChatGPT, Claude, Gemini, Perplexity — any model, any task |
-| **45+ MCP Tools** | Search, code, translate, analyze, brainstorm — all via MCP |
+| **9 AI Providers** | ChatGPT, Claude, Gemini, Perplexity, DeepSeek, Grok, Z.AI, Copilot, Meta AI |
+| **54 MCP Tools** | Search, code, translate, analyze, provider control, file workflows |
 | **REST API** | OpenAI-compatible API on `localhost:3210` |
 | **SDKs** | Python & JavaScript — one function each |
 | **No API Keys** | Use your existing account logins |
@@ -62,7 +62,9 @@ POST /v1/chat/completions
 
 ## What's New in v3.5.0
 
+- 🆕 **5 additional providers** — DeepSeek, Grok, Z.AI, Copilot, Meta AI
 - 🆕 **27 new MCP tools** — content, analysis, file analysis, window control, session management
+- 🆕 **Provider inspection tools** — `init_provider`, `provider_status`, `navigate_provider`, `debug_provider_dom`, `execute_provider_script`
 - 🆕 **REST API** — OpenAI-compatible endpoint at `localhost:3210`
 - 🆕 **Python & JavaScript SDKs** — one function to do everything
 - 🆕 **Smart Router** — auto-picks best AI with retry logic
@@ -70,6 +72,8 @@ POST /v1/chat/completions
 - 🆕 **Image Search** — find images on any topic
 - 🆕 **File Analysis** — upload and analyze local files with any AI
 - 🆕 **Window Controls** — show, hide, toggle, headless mode
+- 🆕 **macOS build targets** — `npm run build:mac` and `npm run build:mac:dir`
+-    **Navigation & Login** - Allows direct URL changes, and setting localStorage values for login.
 - 🔧 **Enhanced typing detection** — better response capture for all providers
 - 🔧 **Claude code hack** — forces inline code instead of artifacts for reliable capture
 
@@ -79,7 +83,7 @@ POST /v1/chat/completions
 
 ### Requirements
 
-- **Windows 10/11 or Mac**
+- **Windows 10/11 or macOS**
 - **Node.js 18+** → [Download Node.js](https://nodejs.org/)
 
 ### Installation
@@ -90,7 +94,7 @@ POST /v1/chat/completions
 
 **Download Installer**
 
-Download the latest release and run the installer.
+Download the latest release and run the installer. Windows installers are published; macOS can be run from source or built locally from this repo.
 
 [Download for Windows →](https://github.com/Zen4-bit/Proxima/releases)
 
@@ -110,48 +114,41 @@ npm start
 </tr>
 </table>
 
+### Build Commands
+
+| Command | Output |
+|---------|--------|
+| `npm start` | Run Proxima locally |
+| `npm run mcp` | Launch the stdio MCP server directly |
+| `npm run build:win` | Build the Windows app |
+| `npm run build:installer` | Build the Windows NSIS installer |
+| `npm run build:mac` | Build macOS universal `dmg` + `zip` artifacts into `dist/` |
+| `npm run build:mac:dir` | Build an unpacked macOS `.app` directory into `dist/` |
+
 ### Quick Setup
 
-1. **Open Proxima** and login to your AI providers
-2. **Copy MCP config** from Settings panel
-3. **API is live** at `http://localhost:3210`
+1. **Open Proxima**, enable the providers you want, and log in to each one
+2. **Copy MCP config** from the Settings panel so the path matches your current source or packaged install
+3. **Connect your MCP client** and start using provider tools like `ask_deepseek`, `ask_grok`, `ask_zai`, `ask_copilot`, or `ask_metaai`
+4. **API is live** at `http://localhost:3210`
 
 ---
 
 ## Supported Providers
 
-<table>
-<tr>
-<td align="center" width="25%">
-<br>
-<strong>ChatGPT</strong>
-<br>
-OpenAI's GPT-4
-<br><br>
-</td>
-<td align="center" width="25%">
-<br>
-<strong>Claude</strong>
-<br>
-Anthropic's Claude
-<br><br>
-</td>
-<td align="center" width="25%">
-<br>
-<strong>Gemini</strong>
-<br>
-Google's Gemini
-<br><br>
-</td>
-<td align="center" width="25%">
-<br>
-<strong>Perplexity</strong>
-<br>
-Web search & research
-<br><br>
-</td>
-</tr>
-</table>
+| Provider | Model ID | Enabled by Default | Default Action |
+|----------|----------|--------------------|----------------|
+| ChatGPT | `chatgpt` | Yes | `chat` |
+| Claude | `claude` | No | `chat` |
+| Gemini | `gemini` | Yes | `chat` |
+| Perplexity | `perplexity` | Yes | `search` |
+| DeepSeek | `deepseek` | No | `chat` |
+| Grok | `grok` | No | `chat` |
+| Z.AI | `zai` | No | `chat` |
+| Copilot | `copilot` | No | `chat` |
+| Meta AI | `metaai` | No | `chat` |
+
+> **Note:** Perplexity is search-first for shared tools. All other providers default to chat behavior.
 
 ### Model Aliases
 
@@ -159,11 +156,33 @@ You can use familiar names — they all resolve to the right provider:
 
 | Provider | Aliases |
 |----------|---------|
-| ChatGPT | `chatgpt`, `gpt`, `gpt-4`, `gpt-4o`, `openai` |
-| Claude | `claude`, `anthropic`, `sonnet`, `opus`, `haiku` |
-| Gemini | `gemini`, `google`, `bard`, `gemini-pro` |
+| ChatGPT | `chatgpt`, `gpt`, `gpt-4`, `gpt-4o`, `gpt-4.5`, `openai` |
+| Claude | `claude`, `claude-3`, `claude-3.5`, `claude-4`, `anthropic`, `sonnet`, `opus`, `haiku` |
+| Gemini | `gemini`, `gemini-pro`, `gemini-2`, `gemini-2.5`, `google`, `bard` |
 | Perplexity | `perplexity`, `pplx`, `sonar` |
+| DeepSeek | `deepseek`, `deepseek-chat`, `deepseek-r1`, `r1` |
+| Grok | `grok`, `grok-3`, `xai`, `x.ai` |
+| Z.AI | `zai`, `z.ai`, `z ai`, `z-ai`, `glm`, `glm-5`, `glm-5.1` |
+| Copilot | `copilot`, `microsoft copilot`, `ms copilot` |
+| Meta AI | `metaai`, `meta ai`, `meta.ai` |
 | Auto | `auto` — picks the best available |
+
+### Provider-Specific MCP Tools
+
+Each provider also has a direct MCP tool path for targeted calls. These tools accept `message` and optional `files`.
+
+| Provider | MCP Tool |
+|----------|----------|
+| ChatGPT | `ask_chatgpt` |
+| Claude | `ask_claude` |
+| Gemini | `ask_gemini` |
+| DeepSeek | `ask_deepseek` |
+| Grok | `ask_grok` |
+| Z.AI | `ask_zai` |
+| Copilot | `ask_copilot` |
+| Meta AI | `ask_metaai` |
+
+Perplexity is exposed through the search-oriented MCP tools such as `deep_search`, `pro_search`, `news_search`, `reddit_search`, and `academic_search` rather than a dedicated `ask_perplexity` tool.
 
 ---
 
@@ -343,6 +362,8 @@ const stats = await client.getStats();
 
 Works with Node.js 18+ (uses native `fetch`).
 
+Any supported provider ID or alias can be used from the SDKs, including `deepseek`, `grok`, `zai`, `copilot`, and `metaai`.
+
 ### SDK Configuration
 
 ```python
@@ -366,13 +387,26 @@ Add this to your AI coding app's MCP settings:
   "mcpServers": {
     "proxima": {
       "command": "node",
-      "args": ["C:/path/to/proxima/src/mcp-server-v3.js"]
+      "args": ["/absolute/path/to/Proxima/src/mcp-server-v3.js"]
     }
   }
 }
 ```
 
-> **Tip:** Copy the exact path from Proxima's Settings panel.
+### MCP Server Paths
+
+Proxima generates the correct JSON for the current install in the Settings panel. These are the common path patterns:
+
+| Install Type | Example MCP Server Path |
+|--------------|-------------------------|
+| Source checkout on macOS | `/Users/you/Dev/Proxima/src/mcp-server-v3.js` |
+| Source checkout on Windows | `C:/path/to/Proxima/src/mcp-server-v3.js` |
+| Packaged macOS app | `/Applications/Proxima.app/Contents/Resources/app.asar.unpacked/src/mcp-server-v3.js` |
+| Packaged Windows app | `C:/Program Files/Proxima/resources/app.asar.unpacked/src/mcp-server-v3.js` |
+
+> **Tip:** Copy the exact config from Proxima's Settings panel instead of typing paths manually.
+>
+> **File attachments:** Turn on **Enable File Attachments** in Settings if you want MCP tools to use `files` or `filePath`.
 
 ### Compatible Apps
 
@@ -409,16 +443,26 @@ Add this to your AI coding app's MCP settings:
 | `verify_code` | Verify code follows standards |
 | `research_fix` | Research how to fix specific errors |
 
-### 🤖 AI Provider Tools (6)
+### 🤖 AI Provider Tools (16)
 
 | Tool | Description |
 |------|-------------|
 | `ask_chatgpt` | Direct query to ChatGPT (with file support) |
 | `ask_claude` | Direct query to Claude (with file support) |
 | `ask_gemini` | Direct query to Gemini (with file support) |
+| `ask_deepseek` | Direct query to DeepSeek (with file support) |
+| `ask_grok` | Direct query to Grok (with file support) |
+| `ask_zai` | Direct query to Z.AI (with file support) |
+| `ask_copilot` | Direct query to Microsoft Copilot (with file support) |
+| `ask_metaai` | Direct query to Meta AI (with file support) |
 | `ask_all_ais` | Query ALL enabled AIs simultaneously |
 | `compare_ais` | Compare responses from multiple AIs side-by-side |
 | `smart_query` | Auto-route to best AI via Smart Router |
+| `init_provider` | Initialize a provider tab/session inside Proxima |
+| `provider_status` | Inspect login, typing, and current page status for a provider |
+| `navigate_provider` | Open a provider home page or a custom URL |
+| `debug_provider_dom` | Collect provider DOM/debug info for troubleshooting |
+| `execute_provider_script` | Run JavaScript in a provider page context |
 
 ### 📝 Content & Research Tools (8)
 
@@ -480,15 +524,17 @@ Add this to your AI coding app's MCP settings:
 ```
 proxima/
 ├── electron/
-│   ├── main-v2.cjs             # Electron main process
+│   ├── main-v2.cjs             # Electron main process + MCP config generation
 │   ├── browser-manager.cjs     # Browser view management
 │   ├── rest-api.cjs            # REST API server (OpenAI-compatible)
+│   ├── provider-senders/       # Provider-specific message automation
 │   ├── index-v2.html           # Application UI
-│   ├── preload.cjs             # Renderer preload script
-│   ├── preload.cjs              # Renderer preload bridge
+│   ├── preload.cjs             # Renderer preload bridge
 │   └── provider-preload.cjs    # Provider page preload
 ├── src/
-│   └── mcp-server-v3.js        # MCP server (45+ tools)
+│   ├── mcp-server-v3.js        # MCP server (54 tools)
+│   ├── provider-catalog.cjs    # Provider IDs, aliases, URLs, defaults
+│   └── provider-automation.cjs # Typing and response extraction logic
 ├── sdk/
 │   ├── proxima.py              # Python SDK — one function
 │   └── proxima.js              # JavaScript SDK — one function
@@ -513,6 +559,12 @@ Click the provider tab and login in the embedded browser. Session will be saved.
 </details>
 
 <details>
+<summary><strong>MCP says a provider is disabled</strong></summary>
+
+Enable that provider in Proxima Settings first. The direct provider tools (`ask_deepseek`, `ask_grok`, `ask_zai`, `ask_copilot`, `ask_metaai`, etc.) only work when the provider is enabled.
+</details>
+
+<details>
 <summary><strong>API not responding</strong></summary>
 
 1. Make sure Proxima app is running
@@ -526,6 +578,12 @@ Click the provider tab and login in the embedded browser. Session will be saved.
 1. Ensure Proxima is running
 2. Verify the path in your MCP config is correct
 3. Restart your AI coding app
+</details>
+
+<details>
+<summary><strong>File-based MCP tools are not attaching files</strong></summary>
+
+Enable **File Attachments** in Proxima Settings and use absolute paths for `files` or `filePath`.
 </details>
 
 ---
