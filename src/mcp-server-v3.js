@@ -260,8 +260,8 @@ class AIProvider {
         return result;
     }
 
-    async chat(message, useCache = true) {
-        // Check cache
+    async chat(message, useCache = false) {
+        // Check cache (disabled by default to avoid stale responses)
         if (useCache && this.cache.has(message)) {
             const cached = this.cache.get(message);
             if (Date.now() - cached.time < this.cacheTimeout) {
@@ -370,7 +370,7 @@ class AIProvider {
     }
 
     // Legacy chat method (without typing detection)
-    async chatSimple(message, useCache = true) {
+    async chatSimple(message, useCache = false) {
         if (useCache && this.cache.has(message)) {
             const cached = this.cache.get(message);
             if (Date.now() - cached.time < this.cacheTimeout) {
@@ -387,7 +387,7 @@ class AIProvider {
         return response;
     }
 
-    async search(query, useCache = true) {
+    async search(query, useCache = false) {
         return await this.chat(query, useCache);
     }
 
